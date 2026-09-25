@@ -18,10 +18,10 @@ func main() {
 	db.InitPostgres(ctx, cfg.PostgresDSN)
 	defer db.ClosePostgres(ctx)
 
-	db.InitRedis(ctx)
+	db.InitRedis(ctx, cfg.RedisDSN)
 	defer db.CloseRedis(ctx)
 
-	mux := getServer(cfg)
+	mux := GetServer(cfg)
 
 	slog.Info("ListenAndServe", "port", "8080")
 	err := http.ListenAndServe(":8080", mux)
@@ -30,7 +30,7 @@ func main() {
 	}
 }
 
-func getServer(cfg *config.Config) *http.ServeMux {
+func GetServer(cfg *config.Config) *http.ServeMux {
 	shortnerSrv := shortner.New(cfg)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", handlers.Redirect)

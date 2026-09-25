@@ -3,6 +3,7 @@ package config
 type Config struct {
 	BaseURL     string
 	PostgresDSN string
+	RedisDSN    string
 }
 
 func New() *Config {
@@ -10,5 +11,6 @@ func New() *Config {
 	return &Config{
 		BaseURL:     "http://localhost:8080",
 		PostgresDSN: pgDsn,
+		RedisDSN:    "redis://localhost:6379/0",
 	}
 }

@@ -9,22 +9,24 @@ import (
 
 const (
 	RedisGlobalCounterKey = "url:global:counter"
-	RedisCodeUrlKey       = "url:code:%s"
+	RedisCodeURLKey       = "url:code:%s"
 	InitialValue          = 238_328 // Sets the starting threshold (4-character minimum)
 )
 
 var Redis *redis.Client
 
-func InitRedis(ctx context.Context) {
-	Redis = redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		DB:       0,
-		PoolSize: 10,
-		Password: "",
-	})
-	if err := Redis.Ping(ctx).Err(); err != nil {
+func InitRedis(ctx context.Context, dsn string) {
+	opts, err := redis.ParseURL(dsn)
+	if err != nil {
 		panic(err)
 	}
+	Redis = redis.NewClient(opts)
+
+	// Verify the connection works cleanly
+	if err := Redis.Ping(ctx).Err(); err != nil {
+		log.Fatalf("Failed to establish Redis handshake: %v", err)
+	}
+
 	initializeCounter(ctx)
 }
 

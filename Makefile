@@ -1,4 +1,3 @@
-
 .PHONY: test
 test:
 	go test -v ./...
@@ -23,6 +22,10 @@ pgcon:
 rediscon:
 	docker exec -it local_redis redis-cli
 
-.PHONY: curl_test
-curl_test:
+.PHONY: curl_post
+curl_post:
 	curl -X POST http://localhost:8080/shorten -H "Content-Type: application/json" -d '{"long_url": "http://pudim.com"}'
+
+.PHONY: curl_get
+curl_get: 
+	curl -v -X GET http://localhost:8080/100M
