@@ -3,10 +3,14 @@ package db
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var PG *pgxpool.Pool
+var (
+	PG          *pgxpool.Pool
+	ErrNotFound = pgx.ErrNoRows
+)
 
 func InitPostgres(ctx context.Context, dsn string) {
 	cfg, err := pgxpool.ParseConfig(dsn)

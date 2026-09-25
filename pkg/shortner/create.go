@@ -26,6 +26,10 @@ func (s shortener) Create(longURL string) (string, error) {
 	}
 	code := base62.EncodeInt64(counter)
 	slog.Info("Create", "counter", counter, "code", code)
+	_, err = db.PG.Exec(context.Background(), "INSERT INTO shortener (code, long_url) VALUES ($1, $2)", code, longURL)
+	if err != nil {
+		return "", err
+	}
 	return s.config.BaseURL + "/" + code, nil
 }
 

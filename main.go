@@ -39,13 +39,23 @@ type ShortenerResponse struct {
 }
 
 func getServer(cfg *config.Config) *http.ServeMux {
-	shortner := shortner.New(cfg)
+	shortnerSrv := shortner.New(cfg)
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /{code}", func(w http.ResponseWriter, r *http.Request) {
 		code := r.PathValue("code")
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(code))
+		longURL, err := shortner.Retrieve(code)
+		if err != nil {
+			slog.Error("GET /{code}", "error", err)
+			if err == db.ErrNotFound {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Location", longURL)
+		w.WriteHeader(http.StatusFound) // 302
 	})
 
 	mux.HandleFunc("POST /shorten", func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +68,7 @@ func getServer(cfg *config.Config) *http.ServeMux {
 		}
 
 		slog.Info("POST /shorten", "body", payload.LongURL)
-		shortURL, err := shortner.Create(payload.LongURL)
+		shortURL, err := shortnerSrv.Create(payload.LongURL)
 		if err != nil {
 			slog.Error("POST /shorten", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)
