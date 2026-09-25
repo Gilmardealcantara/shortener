@@ -9,17 +9,17 @@ import (
 	"github.com/mattheath/base62"
 )
 
-type shortener struct {
+type Shortener struct {
 	config *config.Config
 }
 
-func New(config *config.Config) *shortener {
-	return &shortener{
+func New(config *config.Config) *Shortener {
+	return &Shortener{
 		config: config,
 	}
 }
 
-func (s shortener) Create(longURL string) (string, error) {
+func (s Shortener) Create(longURL string) (string, error) {
 	counter, err := generateUniqueID(context.Background())
 	if err != nil {
 		return "", err
