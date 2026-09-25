@@ -9,6 +9,7 @@ import (
 
 const (
 	RedisGlobalCounterKey = "url:global:counter"
+	RedisCodeUrlKey       = "url:code:%s"
 	InitialValue          = 238_328 // Sets the starting threshold (4-character minimum)
 )
 

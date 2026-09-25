@@ -19,7 +19,7 @@ type ShortenerResponse struct {
 
 func Redirect(w http.ResponseWriter, r *http.Request) {
 	code := r.PathValue("code")
-	longURL, err := shortner.Retrieve(code)
+	longURL, err := shortner.Retrieve(r.Context(), code)
 	if err != nil {
 		slog.Error("GET /{code}", "error", err)
 		if err == db.ErrNotFound {
@@ -44,7 +44,7 @@ func Create(shortnerSrv *shortner.Shortener) http.HandlerFunc {
 		}
 
 		slog.Info("POST /shorten", "body", payload.LongURL)
-		shortURL, err := shortnerSrv.Create(payload.LongURL)
+		shortURL, err := shortnerSrv.Create(r.Context(), payload.LongURL)
 		if err != nil {
 			slog.Error("POST /shorten", "error", err)
 			http.Error(w, err.Error(), http.StatusInternalServerError)

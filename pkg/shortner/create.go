@@ -19,14 +19,14 @@ func New(config *config.Config) *Shortener {
 	}
 }
 
-func (s Shortener) Create(longURL string) (string, error) {
+func (s Shortener) Create(ctx context.Context, longURL string) (string, error) {
 	counter, err := generateUniqueID(context.Background())
 	if err != nil {
 		return "", err
 	}
 	code := base62.EncodeInt64(counter)
 	slog.Info("Create", "counter", counter, "code", code)
-	_, err = db.PG.Exec(context.Background(), "INSERT INTO shortener (code, long_url) VALUES ($1, $2)", code, longURL)
+	_, err = db.PG.Exec(ctx, "INSERT INTO shortener (code, long_url) VALUES ($1, $2)", code, longURL)
 	if err != nil {
 		return "", err
 	}
