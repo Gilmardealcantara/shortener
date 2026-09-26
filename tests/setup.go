@@ -9,6 +9,7 @@ import (
 
 	"github.com/Gilmardealcantara/shortener/pkg/config"
 	"github.com/Gilmardealcantara/shortener/pkg/handlers"
+	"github.com/Gilmardealcantara/shortener/pkg/middlewares"
 	"github.com/Gilmardealcantara/shortener/pkg/shortner"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -74,6 +75,6 @@ func SetupMuxServer() *http.ServeMux {
 	shortnerSrv := shortner.New(cfg)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", handlers.Redirect)
-	mux.HandleFunc("POST /shorten", handlers.Create(shortnerSrv))
+	mux.Handle("POST /shorten", middlewares.HostContext(http.HandlerFunc(handlers.Create(shortnerSrv))))
 	return mux
 }

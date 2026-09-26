@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,7 @@ func TestGet(t *testing.T) {
 	defer db.CloseRedis(ctx)
 
 	testServer := httptest.NewServer(SetupMuxServer())
+	slog.Info("TestRedirect", "testServer", testServer.URL)
 
 	// Create a custom client that blocks redirect-following
 	client := &http.Client{
@@ -43,7 +45,7 @@ func TestGet(t *testing.T) {
 		body, _ := io.ReadAll(resp.Body)
 		var data handlers.ShortenerResponse
 		json.Unmarshal(body, &data)
-		assert.Regexp(t, `^http://localhost:8080/.*$`, data.ShortURL)
+		assert.Regexp(t, testServer.URL+`.*$`, data.ShortURL)
 
 		t.Run("Geting the shortened URL"+data.ShortURL, func(t *testing.T) {
 			resp, err := client.Get(data.ShortURL)

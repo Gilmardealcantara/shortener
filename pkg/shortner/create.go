@@ -6,6 +6,7 @@ import (
 
 	"github.com/Gilmardealcantara/shortener/db"
 	"github.com/Gilmardealcantara/shortener/pkg/config"
+	"github.com/Gilmardealcantara/shortener/pkg/middlewares"
 	"github.com/mattheath/base62"
 )
 
@@ -30,7 +31,14 @@ func (s Shortener) Create(ctx context.Context, longURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return s.config.BaseURL + "/" + code, nil
+
+	baseURL, ok := middlewares.GetBaseURL(ctx)
+	if !ok {
+		return s.config.BaseURL + "/" + code, nil
+	}
+	slog.Info("Create", "baseUrl", baseURL, "code", code)
+	url := baseURL + "/" + code
+	return url, nil
 }
 
 // Every single call to this function across 10 different services

@@ -43,7 +43,7 @@ func Create(shortnerSrv *shortner.Shortener) http.HandlerFunc {
 			return
 		}
 
-		slog.Info("POST /shorten", "body", payload.LongURL)
+		slog.Info("POST /shorten", "body", payload.LongURL, "host", r.Host)
 		shortURL, err := shortnerSrv.Create(r.Context(), payload.LongURL)
 		if err != nil {
 			slog.Error("POST /shorten", "error", err)
