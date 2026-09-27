@@ -21,7 +21,7 @@ func New(config *config.Config) *Shortener {
 }
 
 func (s Shortener) Create(ctx context.Context, longURL string) (string, error) {
-	counter, err := generateUniqueID(context.Background())
+	counter, err := generateUniqueID(ctx)
 	if err != nil {
 		return "", err
 	}

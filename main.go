@@ -27,7 +27,7 @@ func main() {
 	cfg := config.New()
 
 	// Set up OpenTelemetry.
-	otelShutdown, err := setupOTelSDK(ctx)
+	otelShutdown, err := setupOTelSDK(ctx, cfg)
 	if err != nil {
 		panic(err)
 	}
@@ -99,7 +99,7 @@ func newServerHandler(cfg *config.Config) http.Handler {
 }
 
 func configSlog() {
-	name := "go.opentelemetry.io/contrib/examples/shortner"
+	name := "github.com/Gilmardealcantara/shortener"
 	logger := otelslog.NewLogger(name)
 	slog.SetDefault(logger)
 }
