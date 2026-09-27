@@ -8,9 +8,9 @@ import (
 	"github.com/Gilmardealcantara/shortener/pkg/config"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/log/global"
 	"go.opentelemetry.io/otel/propagation"
@@ -25,9 +25,6 @@ import (
 func setupOTelSDK(ctx context.Context, cfg *config.Config) (func(context.Context) error, error) {
 	var shutdownFuncs []func(context.Context) error
 
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
 	shutdown := func(ctx context.Context) error {
 		var err error
 		for _, fn := range shutdownFuncs {
@@ -37,7 +34,6 @@ func setupOTelSDK(ctx context.Context, cfg *config.Config) (func(context.Context
 		return err
 	}
 
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
 	var err error
 	handleErr := func(inErr error) {
 		err = errors.Join(inErr, shutdown(ctx))
@@ -48,11 +44,13 @@ func setupOTelSDK(ctx context.Context, cfg *config.Config) (func(context.Context
 		return shutdown, err
 	}
 
-	// Set up propagator.
+	headers := map[string]string{
+		"api-key": cfg.NewRelicAPIKey,
+	}
+
 	otel.SetTextMapPropagator(newPropagator())
 
-	// Set up trace provider.
-	tracerProvider, err := newTracerProvider(ctx, res, cfg.OTelEndpoint)
+	tracerProvider, err := newTracerProvider(ctx, res, cfg.OTelEndpoint, headers)
 	if err != nil {
 		handleErr(err)
 		return shutdown, err
@@ -60,8 +58,7 @@ func setupOTelSDK(ctx context.Context, cfg *config.Config) (func(context.Context
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	// Set up meter provider.
-	meterProvider, err := newMeterProvider(ctx, res, cfg.OTelEndpoint)
+	meterProvider, err := newMeterProvider(ctx, res, cfg.OTelEndpoint, headers)
 	if err != nil {
 		handleErr(err)
 		return shutdown, err
@@ -69,8 +66,7 @@ func setupOTelSDK(ctx context.Context, cfg *config.Config) (func(context.Context
 	shutdownFuncs = append(shutdownFuncs, meterProvider.Shutdown)
 	otel.SetMeterProvider(meterProvider)
 
-	// Set up logger provider.
-	loggerProvider, err := newLoggerProvider(ctx, res, cfg.OTelEndpoint)
+	loggerProvider, err := newLoggerProvider(ctx, res, cfg.OTelEndpoint, headers)
 	if err != nil {
 		handleErr(err)
 		return shutdown, err
@@ -98,62 +94,58 @@ func newPropagator() propagation.TextMapPropagator {
 	)
 }
 
-func newTracerProvider(ctx context.Context, res *resource.Resource, endpoint string) (*trace.TracerProvider, error) {
-	exporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint(endpoint),
+func newTracerProvider(ctx context.Context, res *resource.Resource, endpoint string, headers map[string]string) (*trace.TracerProvider, error) {
+	exporter, err := otlptracehttp.New(ctx,
+		otlptracehttp.WithEndpoint(endpoint),
+		otlptracehttp.WithHeaders(headers),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	tracerProvider := trace.NewTracerProvider(
+	return trace.NewTracerProvider(
 		trace.WithBatcher(exporter, trace.WithBatchTimeout(time.Second)),
 		trace.WithResource(res),
-	)
-	return tracerProvider, nil
+	), nil
 }
 
-func newMeterProvider(ctx context.Context, res *resource.Resource, endpoint string) (*metric.MeterProvider, error) {
-	exporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithEndpoint(endpoint),
+func newMeterProvider(ctx context.Context, res *resource.Resource, endpoint string, headers map[string]string) (*metric.MeterProvider, error) {
+	exporter, err := otlpmetrichttp.New(ctx,
+		otlpmetrichttp.WithEndpoint(endpoint),
+		otlpmetrichttp.WithHeaders(headers),
+		// New Relic recommends delta temporality — avoids cumulative memory overhead
+		otlpmetrichttp.WithTemporalitySelector(metric.DefaultTemporalitySelector),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	meterProvider := metric.NewMeterProvider(
+	return metric.NewMeterProvider(
 		metric.WithReader(metric.NewPeriodicReader(exporter,
 			metric.WithInterval(10*time.Second),
 		)),
 		metric.WithResource(res),
-	)
-	return meterProvider, nil
+	), nil
 }
 
-func newLoggerProvider(ctx context.Context, res *resource.Resource, endpoint string) (*log.LoggerProvider, error) {
-	// stdout processor — always visible in the terminal
-	stdoutExporter, err := stdoutlog.New()
+func newLoggerProvider(ctx context.Context, res *resource.Resource, endpoint string, headers map[string]string) (*log.LoggerProvider, error) {
+	// stdout — always visible in the terminal
+	stdoutExporter, err := stdoutlog.New(stdoutlog.WithPrettyPrint(), stdoutlog.WithoutTimestamps())
 	if err != nil {
 		return nil, err
 	}
 
-	// OTLP processor — forwarded to the configured backend
-	// Note: Jaeger does not support OTLP logs; use an OTel Collector or
-	// a logs-capable backend (Loki, OpenSearch) to store these remotely.
-	otlpExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithInsecure(),
-		otlploggrpc.WithEndpoint(endpoint),
+	otlpExporter, err := otlploghttp.New(ctx,
+		otlploghttp.WithEndpoint(endpoint),
+		otlploghttp.WithHeaders(headers),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	loggerProvider := log.NewLoggerProvider(
+	return log.NewLoggerProvider(
 		log.WithProcessor(log.NewSimpleProcessor(stdoutExporter)),
 		log.WithProcessor(log.NewBatchProcessor(otlpExporter)),
 		log.WithResource(res),
-	)
-	return loggerProvider, nil
+	), nil
 }

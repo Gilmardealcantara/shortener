@@ -1,18 +1,22 @@
 package config
 
+import "os"
+
 type Config struct {
-	BaseURL      string
-	PostgresDSN  string
-	RedisDSN     string
-	OTelEndpoint string // OTLP gRPC endpoint, e.g. "localhost:4317"
+	BaseURL        string
+	PostgresDSN    string
+	RedisDSN       string
+	OTelEndpoint   string // OTLP/HTTP host:port only — no scheme, no path, e.g. "otlp.nr-data.net"
+	NewRelicAPIKey string // New Relic license key, set via NEW_RELIC_LICENSE_KEY env var
 }
 
 func New() *Config {
 	pgDsn := "postgres://myuser:mypassword@localhost:5432/mydb?sslmode=disable"
 	return &Config{
-		BaseURL:      "http://localhost:8080",
-		PostgresDSN:  pgDsn,
-		RedisDSN:     "redis://localhost:6379/0",
-		OTelEndpoint: "localhost:4317",
+		BaseURL:        "http://localhost:8080",
+		PostgresDSN:    pgDsn,
+		RedisDSN:       "redis://localhost:6379/0",
+		OTelEndpoint:   "otlp.nr-data.net",
+		NewRelicAPIKey: os.Getenv("NEW_RELIC_LICENSE_KEY"),
 	}
 }

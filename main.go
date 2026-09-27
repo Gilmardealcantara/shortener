@@ -17,6 +17,7 @@ import (
 	"github.com/Gilmardealcantara/shortener/pkg/shortner"
 	"go.opentelemetry.io/contrib/bridges/otelslog"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel"
 )
 
 func main() {
@@ -26,17 +27,21 @@ func main() {
 
 	cfg := config.New()
 
-	// Set up OpenTelemetry.
+	// Set up OpenTelemetry first — slog must be configured after so the
+	// OTel logger provider is already registered when the bridge is created.
 	otelShutdown, err := setupOTelSDK(ctx, cfg)
 	if err != nil {
 		panic(err)
 	}
-	// Handle shutdown properly so nothing leaks.
 	defer func() {
 		err = errors.Join(err, otelShutdown(context.Background()))
 	}()
 
+	// Now configure slog to fan out to both stdout and the OTel log pipeline.
 	configSlog()
+
+	// Send a startup probe span to verify connectivity with the OTel backend.
+	probeOTelConnectivity(ctx, cfg.OTelEndpoint)
 
 	db.InitPostgres(ctx, cfg.PostgresDSN)
 	defer db.ClosePostgres(ctx)
@@ -46,7 +51,6 @@ func main() {
 	defer db.CloseRedis(ctx)
 	slog.Info("Redis startded!", "dsn", cfg.RedisDSN)
 
-	// start hppt server
 	err = run(ctx, cfg, stop)
 	if err != nil {
 		slog.Error("Server Shutdown Error", "err", err)
@@ -70,19 +74,15 @@ func run(ctx context.Context, cfg *config.Config, stop context.CancelFunc) error
 		srvErr <- srv.ListenAndServe()
 	}()
 
-	// Wait for shutdown signal
 	select {
 	case err := <-srvErr:
-		// Error when starting the server
 		slog.Error("Server Error", "err", err)
 		return err
 	case <-ctx.Done():
-		// Shutdown signal received
 		slog.Info("Server Shutdown")
 		stop()
 	}
 
-	// when sutdown signal received
 	return srv.Shutdown(ctx)
 }
 
@@ -92,14 +92,35 @@ func newServerHandler(cfg *config.Config) http.Handler {
 	mux.HandleFunc("GET /{code}", handlers.Redirect)
 	mux.Handle("POST /shorten", middlewares.HostContext(http.HandlerFunc(handlers.Create(shortnerSrv))))
 
-	// Add HTTP instrumentation for the whole server.
 	handler := otelhttp.NewHandler(mux, "/")
-
 	return handler
 }
 
+// configSlog fans out slog records to both a JSON stdout handler and the OTel
+// log bridge. Must be called after setupOTelSDK so the logger provider is
+// already registered.
 func configSlog() {
-	name := "github.com/Gilmardealcantara/shortener"
-	logger := otelslog.NewLogger(name)
-	slog.SetDefault(logger)
+	slog.SetDefault(otelslog.NewLogger("github.com/Gilmardealcantara/shortener"))
+}
+
+// probeOTelConnectivity creates a single span and forces an immediate flush
+// to verify the backend is reachable on startup.
+func probeOTelConnectivity(ctx context.Context, endpoint string) {
+	tracer := otel.Tracer("startup-probe")
+	_, span := tracer.Start(ctx, "otel.connectivity.probe")
+	span.End()
+
+	type forceFlush interface {
+		ForceFlush(context.Context) error
+	}
+	if ff, ok := otel.GetTracerProvider().(forceFlush); ok {
+		if err := ff.ForceFlush(ctx); err != nil {
+			slog.Error("OTel connectivity probe failed — traces may not reach the backend",
+				"endpoint", endpoint,
+				"error", err,
+			)
+			return
+		}
+	}
+	slog.Info("OTel connectivity probe OK", "endpoint", endpoint)
 }
