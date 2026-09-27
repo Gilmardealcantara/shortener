@@ -4,7 +4,8 @@ test:
 
 .PHONY: run
 run:
-	go run main.go
+	export OTEL_RESOURCE_ATTRIBUTES="service.name=shortener,service.version=0.1.0"
+	go run .
 
 .PHONY: migrateup
 migrateup:

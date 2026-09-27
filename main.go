@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +15,8 @@ import (
 	"github.com/Gilmardealcantara/shortener/pkg/handlers"
 	"github.com/Gilmardealcantara/shortener/pkg/middlewares"
 	"github.com/Gilmardealcantara/shortener/pkg/shortner"
+	"go.opentelemetry.io/contrib/bridges/otelslog"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
 func main() {
@@ -22,6 +25,18 @@ func main() {
 	defer stop()
 
 	cfg := config.New()
+
+	// Set up OpenTelemetry.
+	otelShutdown, err := setupOTelSDK(ctx)
+	if err != nil {
+		panic(err)
+	}
+	// Handle shutdown properly so nothing leaks.
+	defer func() {
+		err = errors.Join(err, otelShutdown(context.Background()))
+	}()
+
+	configSlog()
 
 	db.InitPostgres(ctx, cfg.PostgresDSN)
 	defer db.ClosePostgres(ctx)
@@ -32,7 +47,7 @@ func main() {
 	slog.Info("Redis startded!", "dsn", cfg.RedisDSN)
 
 	// start hppt server
-	err := run(ctx, cfg, stop)
+	err = run(ctx, cfg, stop)
 	if err != nil {
 		slog.Error("Server Shutdown Error", "err", err)
 		return
@@ -45,7 +60,7 @@ func run(ctx context.Context, cfg *config.Config, stop context.CancelFunc) error
 		BaseContext:  func(l net.Listener) context.Context { return ctx },
 		ReadTimeout:  time.Second,
 		WriteTimeout: 10 * time.Second,
-		Handler:      newServerServer(cfg),
+		Handler:      newServerHandler(cfg),
 	}
 
 	srvErr := make(chan error)
@@ -68,15 +83,23 @@ func run(ctx context.Context, cfg *config.Config, stop context.CancelFunc) error
 	}
 
 	// when sutdown signal received
-	err := srv.Shutdown(ctx)
-	return err
+	return srv.Shutdown(ctx)
 }
 
-func newServerServer(cfg *config.Config) *http.ServeMux {
+func newServerHandler(cfg *config.Config) http.Handler {
 	shortnerSrv := shortner.New(cfg)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /{code}", handlers.Redirect)
 	mux.Handle("POST /shorten", middlewares.HostContext(http.HandlerFunc(handlers.Create(shortnerSrv))))
 
-	return mux
+	// Add HTTP instrumentation for the whole server.
+	handler := otelhttp.NewHandler(mux, "/")
+
+	return handler
+}
+
+func configSlog() {
+	name := "go.opentelemetry.io/contrib/examples/shortner"
+	logger := otelslog.NewLogger(name)
+	slog.SetDefault(logger)
 }
