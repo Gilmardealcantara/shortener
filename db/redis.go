@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 
+	"github.com/redis/go-redis/extra/redisotel/v9"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -21,6 +22,16 @@ func InitRedis(ctx context.Context, dsn string) {
 		panic(err)
 	}
 	Redis = redis.NewClient(opts)
+
+	// Attach OTel tracing hook — every command emits a child span.
+	if err := redisotel.InstrumentTracing(Redis); err != nil {
+		log.Fatalf("Failed to instrument Redis tracing: %v", err)
+	}
+
+	// Attach OTel metrics hook — records command latency, errors, etc.
+	if err := redisotel.InstrumentMetrics(Redis); err != nil {
+		log.Fatalf("Failed to instrument Redis metrics: %v", err)
+	}
 
 	// Verify the connection works cleanly
 	if err := Redis.Ping(ctx).Err(); err != nil {
