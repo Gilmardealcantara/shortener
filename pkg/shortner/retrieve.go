@@ -12,6 +12,7 @@ func Retrieve(ctx context.Context, code string) (string, error) {
 	redisKey := fmt.Sprintf(db.RedisCodeURLKey, code)
 	longURL, err := db.Redis.Get(ctx, redisKey).Result()
 	if err == nil {
+		slog.InfoContext(ctx, "Retrieve from redis", "code", code, "longURL", longURL)
 		return longURL, nil
 	}
 
@@ -19,7 +20,7 @@ func Retrieve(ctx context.Context, code string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	slog.Info("Retrieve from db", "code", code, "longURL", longURL)
+	slog.InfoContext(ctx, "Retrieve from db", "code", code, "longURL", longURL)
 	err = db.Redis.Set(ctx, redisKey, longURL, 0).Err()
 	return longURL, err
 }

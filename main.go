@@ -45,15 +45,15 @@ func main() {
 
 	db.InitPostgres(ctx, cfg.PostgresDSN)
 	defer db.ClosePostgres(ctx)
-	slog.Info("Postgres Started!", "dsn", cfg.PostgresDSN)
+	slog.InfoContext(ctx, "Postgres Started!", "dsn", cfg.PostgresDSN)
 
 	db.InitRedis(ctx, cfg.RedisDSN)
 	defer db.CloseRedis(ctx)
-	slog.Info("Redis startded!", "dsn", cfg.RedisDSN)
+	slog.InfoContext(ctx, "Redis startded!", "dsn", cfg.RedisDSN)
 
 	err = run(ctx, cfg, stop)
 	if err != nil {
-		slog.Error("Server Shutdown Error", "err", err)
+		slog.ErrorContext(ctx, "Server Shutdown Error", "err", err)
 		return
 	}
 }
@@ -70,16 +70,16 @@ func run(ctx context.Context, cfg *config.Config, stop context.CancelFunc) error
 	srvErr := make(chan error)
 
 	go func() {
-		slog.Info("Running Server...", "addr", srv.Addr)
+		slog.InfoContext(ctx, "Running Server...", "addr", srv.Addr)
 		srvErr <- srv.ListenAndServe()
 	}()
 
 	select {
 	case err := <-srvErr:
-		slog.Error("Server Error", "err", err)
+		slog.ErrorContext(ctx, "Server Error", "err", err)
 		return err
 	case <-ctx.Done():
-		slog.Info("Server Shutdown")
+		slog.InfoContext(ctx, "Server Shutdown")
 		stop()
 	}
 
@@ -115,12 +115,12 @@ func probeOTelConnectivity(ctx context.Context, endpoint string) {
 	}
 	if ff, ok := otel.GetTracerProvider().(forceFlush); ok {
 		if err := ff.ForceFlush(ctx); err != nil {
-			slog.Error("OTel connectivity probe failed — traces may not reach the backend",
+			slog.ErrorContext(ctx, "OTel connectivity probe failed — traces may not reach the backend",
 				"endpoint", endpoint,
 				"error", err,
 			)
 			return
 		}
 	}
-	slog.Info("OTel connectivity probe OK", "endpoint", endpoint)
+	slog.InfoContext(ctx, "OTel connectivity probe OK", "endpoint", endpoint)
 }

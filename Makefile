@@ -27,6 +27,14 @@ rediscon:
 curl_post:
 	curl -X POST http://localhost:8080/shorten -H "Content-Type: application/json" -d '{"long_url": "http://pudim.com"}'
 
+.PHONY: curl
+curl:
+	@set -e; \
+	response=$$(curl -fsS -X POST http://localhost:8080/shorten -H "Content-Type: application/json" -d '{"long_url": "http://pudim.com"}'); \
+	short_url=$$(printf '%s' "$$response" | jq -er '.short_url | select(type == "string" and length > 0)'); \
+	printf 'GET %s\n' "$$short_url"; \
+	curl -v "$$short_url"
+
 .PHONY: curl_get
 curl_get: 
 	curl -v -X GET http://localhost:8080/100M
